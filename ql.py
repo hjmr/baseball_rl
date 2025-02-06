@@ -20,7 +20,7 @@ class BaseballEnv(gym.Env):
         # 2) データの保持
         #    - full_data: 学習に使う24万行すべて
         # ----------------------------------------------------------
-        self.full_data = data.reset_index(drop=True)
+        self.full_data = data.reset_index(drop=False)
 
         # ----------------------------------------------------------
         # 3) ユニーク状態の抽出 (drop_duplicates)
@@ -34,14 +34,14 @@ class BaseballEnv(gym.Env):
             "score_diff_class",
             "inning_class",
         ]
-        unique_state_df = self.full_data[state_cols].drop_duplicates()
+        self.state_set = self.full_data[state_cols].drop_duplicates()
 
         # ----------------------------------------------------------
         # 4) 状態 -> インデックス のマッピングを作成
         #    例: (0, 1, 0, 2, 0, 1, 3, 0) -> 1234 (状態ID)
         # ----------------------------------------------------------
         self.state_to_index = {}
-        for idx, row_values in enumerate(unique_state_df.values):
+        for idx, row_values in enumerate(self.state_set.values):
             # row_values は [batting_average_Class, ERA_Class, ..., inning_class] のndarray
             # タプルに変換して dictキーにする
             row_tuple = tuple(row_values)
@@ -70,57 +70,63 @@ class BaseballEnv(gym.Env):
         self.current_step = 0
         self.previous_runner_status = 0
 
-        # 最初の行から状態IDを取得
-        self.current_state_index = self._get_state_index(self.full_data.iloc[self.current_step])
+        # 初期状態をランダムに決定
+        self.current_state_index = random.randint(0, self.n_states - 1)
         return self.current_state_index
 
-    def collect_states(self, current_state):
-        pass
+    def collect_states(self, current_state_idx, action):
+        next_state_candidates = []
+        current_state_tuple = tuple(self.state_set.iloc[current_state_idx].values)
+        for idx, row in enumerate(self.full_data.itertuples()):
+            state_tuple = (
+                row["runner_status1_numeric"],
+                row["BallCountBefore_Corrected"],
+                row["StrikeCountBefore_Corrected"],
+                row["OutCountBefore_Corrected"],
+                row["score_diff_class"],
+                row["inning_class"],
+            )
+            if state_tuple == current_state_tuple and row["swing_flag"] == action:
+                next_state_candidates.append(idx)
+        return next_state_candidates
 
     def step(self, action):
-        """次のステップに進む"""
-        if self.current_step >= len(self.full_data):
-            raise IndexError("Step index out-of-bounds. Check data length and step logic.")
-
-        # 現在の行データを取得
-        row = self.full_data.iloc[self.current_step]
+        # 現在の状態を取得
         reward = 0
+
+        # 次の状態の候補を取得
+        next_state_candidates = self.collect_states(self.current_state_index, action)
+        if len(next_state_candidates) == 0:
+            raise IndexError("No next state found.")
+        next_state_idx = random.choice(next_state_candidates)
+        next_row = self.full_data.iloc[next_state_idx]
 
         # ----------------------------------------------------------
         # 7) 行動に対する報酬 (例: Swingで得点があれば加算)
         #    ※数値は例示で変更している
         # ----------------------------------------------------------
-        if action == 1:  # Swing
-            reward += row["score_reward"] * 30  # 得点 x 30 の報酬
+        reward += next_row["score_reward"] * 30  # 得点 x 30 の報酬
 
         # ----------------------------------------------------------
         # 8) ランナー増加時の報酬
         # ----------------------------------------------------------
-        if row["runner_status1_numeric"] > self.previous_runner_status:
+        if next_row["runner_status1_numeric"] > self.previous_runner_status:
             reward += 9  # ランナーが増えた場合の報酬
-        self.previous_runner_status = row["runner_status1_numeric"]
+        self.previous_runner_status = next_row["runner_status1_numeric"]
 
         # ----------------------------------------------------------
-        # 9) 試合終了時の追加報酬 (最終行で勝敗判定)
+        # 9) ゲームの終了判定
         # ----------------------------------------------------------
         done = False
-        if self.current_step == len(self.full_data) - 1:
+        # ゲームの終了が分からないので，適当な回数のSTEPで終了させる。
+        if self.current_step >= random.randint(1000, 3000):
             done = True
-            if row["home_or_away_attacking"] == 1:  # ホームチームが攻撃
-                reward += 90 if row["home_reward"] > 0 else -45
-            else:  # アウェイチームが攻撃
-                reward += 90 if row["away_reward"] > 0 else -45
 
         # ----------------------------------------------------------
         # 10) 次のステップへ
         # ----------------------------------------------------------
         self.current_step += 1
-        if self.current_step < len(self.full_data):
-            next_row = self.full_data.iloc[self.current_step]
-            next_state_index = self._get_state_index(next_row)
-        else:
-            # データの終端に達した場合
-            next_state_index = self.current_state_index
+        next_state_index = self._get_state_index(next_row)
 
         # 状態を更新
         self.current_state_index = next_state_index
@@ -219,9 +225,6 @@ for episode in range(n_episodes):
     print(f"Episode {episode + 1}/{n_episodes}: Total Reward: {total_reward}")
 
 # Qテーブルの保存
-output_q_table = "/content/q_table_updated3_essential.npy"
+output_q_table = "q_table_updated3_essential.npy"
 np.save(output_q_table, Q_table)
 print(f"Q-learning completed. Q-table saved to {output_q_table}")
-
-# ダウンロードリンクの作成 (Colab環境用)
-files.download(output_q_table)
