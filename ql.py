@@ -4,6 +4,7 @@ from gym import spaces
 import numpy as np
 import pandas as pd
 import random
+import sys
 
 
 class BaseballEnv(gym.Env):
@@ -76,17 +77,9 @@ class BaseballEnv(gym.Env):
 
     def collect_states(self, current_state_idx, action):
         next_state_candidates = []
-        current_state_tuple = tuple(self.state_set.iloc[current_state_idx].values)
-        for idx, row in enumerate(self.full_data.itertuples()):
-            state_tuple = (
-                row["runner_status1_numeric"],
-                row["BallCountBefore_Corrected"],
-                row["StrikeCountBefore_Corrected"],
-                row["OutCountBefore_Corrected"],
-                row["score_diff_class"],
-                row["inning_class"],
-            )
-            if state_tuple == current_state_tuple and row["swing_flag"] == action:
+        for idx, row in self.full_data.iterrows():
+            state_idx = self._get_state_index(row)
+            if state_idx == current_state_idx and row["swing_flag"] == action:
                 next_state_candidates.append(idx)
         return next_state_candidates
 
@@ -97,9 +90,9 @@ class BaseballEnv(gym.Env):
         # 次の状態の候補を取得
         next_state_candidates = self.collect_states(self.current_state_index, action)
         if len(next_state_candidates) == 0:
-            raise IndexError("No next state found.")
-        next_state_idx = random.choice(next_state_candidates)
-        next_row = self.full_data.iloc[next_state_idx]
+            print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
+            return self.current_state_index, 0, True, {}
+        next_row = self.full_data.iloc[random.choice(next_state_candidates)]
 
         # ----------------------------------------------------------
         # 7) 行動に対する報酬 (例: Swingで得点があれば加算)
@@ -206,7 +199,7 @@ for episode in range(n_episodes):
         if random.uniform(0, 1) < epsilon:
             action = env.action_space.sample()  # ランダム
         else:
-            action = np.argmax(Q_table[state_idx])  # 最大Q値を持つ行動
+            action = int(np.argmax(Q_table[state_idx]))  # 最大Q値を持つ行動
 
         # 環境との相互作用: step(action) → (次状態, 報酬, 終了フラグ, info)
         next_state_idx, reward, done, _ = env.step(action)
