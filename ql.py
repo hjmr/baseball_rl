@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import random
 import sys
+from tqdm import tqdm
 
 
 class BaseballEnv(gym.Env):
@@ -12,19 +13,19 @@ class BaseballEnv(gym.Env):
         super(BaseballEnv, self).__init__()
 
         # ----------------------------------------------------------
-        # 1) 空データかどうかをチェック
+        # 空データかどうかをチェック
         # ----------------------------------------------------------
         if data.empty:
             raise ValueError("The input data is empty. Please provide a valid dataset.")
 
         # ----------------------------------------------------------
-        # 2) データの保持
+        # データの保持
         #    - full_data: 学習に使う24万行すべて
         # ----------------------------------------------------------
         self.full_data = data.reset_index(drop=False)
 
         # ----------------------------------------------------------
-        # 3) ユニーク状態の抽出 (drop_duplicates)
+        # ユニーク状態の抽出 (drop_duplicates)
         #    状態空間 8変数だけを抽出 → ユニークな組合せを取得
         # ----------------------------------------------------------
         state_cols = [
@@ -38,11 +39,12 @@ class BaseballEnv(gym.Env):
         self.state_set = self.full_data[state_cols].drop_duplicates()
 
         # ----------------------------------------------------------
-        # 4) 状態 -> インデックス のマッピングを作成
+        # 状態 -> インデックス のマッピングを作成
         #    例: (0, 1, 0, 2, 0, 1, 3, 0) -> 1234 (状態ID)
         # ----------------------------------------------------------
+        print("Creating state to index mapping...")
         self.state_to_index = {}
-        for idx, row_values in enumerate(self.state_set.values):
+        for idx, row_values in tqdm(enumerate(self.state_set.values)):
             # row_values は [batting_average_Class, ERA_Class, ..., inning_class] のndarray
             # タプルに変換して dictキーにする
             row_tuple = tuple(row_values)
@@ -52,7 +54,17 @@ class BaseballEnv(gym.Env):
         self.n_states = len(self.state_to_index)
 
         # ----------------------------------------------------------
-        # 5) Gymのobservation_space と action_space を定義
+        # 高速化のため：状態 + action の遷移先セットを予め作成
+        # ----------------------------------------------------------
+        print("Creating state transition dictionary...")
+        self.state_transition_dict = {}
+        for state_idx in tqdm(range(self.n_states)):
+            for action in [0, 1]:
+                next_state_candidates = self.collect_states(state_idx, action)
+                self.state_transition_dict[(state_idx, action)] = next_state_candidates
+
+        # ----------------------------------------------------------
+        # Gymのobservation_space と action_space を定義
         #    - 観測空間は「状態ID」の離散値（0 ~ n_states-1）
         #    - 行動空間は2離散 (Swing / Not Swing)
         # ----------------------------------------------------------
@@ -60,7 +72,7 @@ class BaseballEnv(gym.Env):
         self.action_space = spaces.Discrete(2)  # 0: Not Swing, 1: Swing
 
         # ----------------------------------------------------------
-        # 6) 学習の進行用変数
+        # 学習の進行用変数
         # ----------------------------------------------------------
         self.current_step = 0
         self.previous_runner_status = 0
@@ -88,27 +100,27 @@ class BaseballEnv(gym.Env):
         reward = 0
 
         # 次の状態の候補を取得
-        next_state_candidates = self.collect_states(self.current_state_index, action)
+        next_state_candidates = self.state_transition_dict[(self.current_state_index, action)]
         if len(next_state_candidates) == 0:
             print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
             return self.current_state_index, 0, True, {}
         next_row = self.full_data.iloc[random.choice(next_state_candidates)]
 
         # ----------------------------------------------------------
-        # 7) 行動に対する報酬 (例: Swingで得点があれば加算)
+        # 行動に対する報酬 (例: Swingで得点があれば加算)
         #    ※数値は例示で変更している
         # ----------------------------------------------------------
         reward += next_row["score_reward"]  # 得点の報酬
 
         # ----------------------------------------------------------
-        # 8) ランナー増加時の報酬
+        # ランナー増加時の報酬
         # ----------------------------------------------------------
         if next_row["runner_status1_numeric"] > self.previous_runner_status:
             reward += 1  # ランナーが増えた場合の報酬
         self.previous_runner_status = next_row["runner_status1_numeric"]
 
         # ----------------------------------------------------------
-        # 9) ゲームの終了判定
+        # ゲームの終了判定
         # ----------------------------------------------------------
         done = False
         # ゲームの終了が分からないので，適当な回数のSTEPで終了させる。
@@ -116,7 +128,7 @@ class BaseballEnv(gym.Env):
             done = True
 
         # ----------------------------------------------------------
-        # 10) 次のステップへ
+        # 次のステップへ
         # ----------------------------------------------------------
         self.current_step += 1
         next_state_index = self._get_state_index(next_row)
@@ -194,6 +206,7 @@ for episode in range(n_episodes):
     total_reward = 0
     done = False
 
+    print(f"Episode {episode + 1}/{n_episodes} ", end="", flush=True)
     while not done:
         # ε-greedy 方策による行動選択
         if random.uniform(0, 1) < epsilon:
@@ -203,6 +216,7 @@ for episode in range(n_episodes):
 
         # 環境との相互作用: step(action) → (次状態, 報酬, 終了フラグ, info)
         next_state_idx, reward, done, _ = env.step(action)
+        print(f".", end="", flush=True)
 
         # Q値の更新
         Q_table[state_idx, action] = Q_table[state_idx, action] + alpha * (
@@ -215,7 +229,7 @@ for episode in range(n_episodes):
         # 状態を更新
         state_idx = next_state_idx
 
-    print(f"Episode {episode + 1}/{n_episodes}: Total Reward: {total_reward}")
+    print(f" done: Total Reward: {total_reward}")
 
 # Qテーブルの保存
 output_q_table = "q_table_updated3_essential.npy"
