@@ -98,13 +98,13 @@ class BaseballEnv(gym.Env):
         # 7) 行動に対する報酬 (例: Swingで得点があれば加算)
         #    ※数値は例示で変更している
         # ----------------------------------------------------------
-        reward += next_row["score_reward"] * 30  # 得点 x 30 の報酬
+        reward += next_row["score_reward"]  # 得点の報酬
 
         # ----------------------------------------------------------
         # 8) ランナー増加時の報酬
         # ----------------------------------------------------------
         if next_row["runner_status1_numeric"] > self.previous_runner_status:
-            reward += 9  # ランナーが増えた場合の報酬
+            reward += 1  # ランナーが増えた場合の報酬
         self.previous_runner_status = next_row["runner_status1_numeric"]
 
         # ----------------------------------------------------------
