@@ -10,6 +10,8 @@ python = "^3.12"
 gym = "^0.26.2"
 pandas = "^2.2.3"
 tqdm = "^4.67.1"
+matplotlib = "^3.10.0"
+seaborn = "^0.13.2"
 
 
 [build-system]

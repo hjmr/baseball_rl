@@ -42,7 +42,7 @@ class BaseballEnv(gym.Env):
         # 状態 -> インデックス のマッピングを作成
         #    例: (0, 1, 0, 2, 0, 1, 3, 0) -> 1234 (状態ID)
         # ----------------------------------------------------------
-        print("Creating state to index mapping...")
+        print("*** Creating state to index mapping...")
         self.state_to_index = {}
         for idx, row_values in tqdm(enumerate(self.state_set.values)):
             # row_values は [batting_average_Class, ERA_Class, ..., inning_class] のndarray
@@ -54,14 +54,10 @@ class BaseballEnv(gym.Env):
         self.n_states = len(self.state_to_index)
 
         # ----------------------------------------------------------
-        # 高速化のため：状態 + action の遷移先セットを予め作成
+        # 高速化のため：各データの状態indexを予め計算
         # ----------------------------------------------------------
-        print("Creating state transition dictionary...")
-        self.state_transition_dict = {}
-        for state_idx in tqdm(range(self.n_states)):
-            for action in [0, 1]:
-                next_state_candidates = self.collect_states(state_idx, action)
-                self.state_transition_dict[(state_idx, action)] = next_state_candidates
+        print("*** Creating state index column...")
+        self.full_data["state_index"] = self.full_data.apply(self._get_state_index, axis=1)
 
         # ----------------------------------------------------------
         # Gymのobservation_space と action_space を定義
@@ -87,20 +83,14 @@ class BaseballEnv(gym.Env):
         self.current_state_index = random.randint(0, self.n_states - 1)
         return self.current_state_index
 
-    def collect_states(self, current_state_idx, action):
-        next_state_candidates = []
-        for idx, row in self.full_data.iterrows():
-            state_idx = self._get_state_index(row)
-            if state_idx == current_state_idx and row["swing_flag"] == action:
-                next_state_candidates.append(idx)
-        return next_state_candidates
-
     def step(self, action):
         # 現在の状態を取得
         reward = 0
 
         # 次の状態の候補を取得
-        next_state_candidates = self.state_transition_dict[(self.current_state_index, action)]
+        next_state_candidates = self.full_data[
+            (self.full_data["state_index"] == self.current_state_index) & (self.full_data["swing_flag"] == action)
+        ]["index"].values
         if len(next_state_candidates) == 0:
             print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
             return self.current_state_index, 0, True, {}
@@ -115,9 +105,9 @@ class BaseballEnv(gym.Env):
         # ----------------------------------------------------------
         # ランナー増加時の報酬
         # ----------------------------------------------------------
-        if next_row["runner_status1_numeric"] > self.previous_runner_status:
-            reward += 1  # ランナーが増えた場合の報酬
-        self.previous_runner_status = next_row["runner_status1_numeric"]
+        # if next_row["runner_status1_numeric"] > self.previous_runner_status:
+        #    reward += 1  # ランナーが増えた場合の報酬
+        # self.previous_runner_status = next_row["runner_status1_numeric"]
 
         # ----------------------------------------------------------
         # ゲームの終了判定
@@ -197,7 +187,7 @@ Q_table = np.zeros((n_states, n_actions))
 alpha = 0.1  # 学習率
 gamma = 0.99  # 割引率
 epsilon = 0.1  # ε-greedy の探索率
-n_episodes = 300  # テスト的に少数 → 実際は150などに増やす
+n_episodes = 5000  # エピソード数
 
 # Q学習アルゴリズム
 for episode in range(n_episodes):
@@ -206,7 +196,6 @@ for episode in range(n_episodes):
     total_reward = 0
     done = False
 
-    print(f"Episode {episode + 1}/{n_episodes} ", end="", flush=True)
     while not done:
         # ε-greedy 方策による行動選択
         if random.uniform(0, 1) < epsilon:
@@ -216,7 +205,6 @@ for episode in range(n_episodes):
 
         # 環境との相互作用: step(action) → (次状態, 報酬, 終了フラグ, info)
         next_state_idx, reward, done, _ = env.step(action)
-        print(f".", end="", flush=True)
 
         # Q値の更新
         Q_table[state_idx, action] = Q_table[state_idx, action] + alpha * (
@@ -229,7 +217,7 @@ for episode in range(n_episodes):
         # 状態を更新
         state_idx = next_state_idx
 
-    print(f" done: Total Reward: {total_reward}")
+    print(f"Episode {episode + 1}/{n_episodes} : Total Reward: {total_reward}")
 
 # Qテーブルの保存
 output_q_table = "q_table_updated3_essential.npy"
