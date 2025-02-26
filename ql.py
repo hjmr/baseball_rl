@@ -94,7 +94,12 @@ class BaseballEnv(gym.Env):
         if len(next_state_candidates) == 0:
             print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
             return self.current_state_index, 0, True, {}
-        next_row = self.full_data.iloc[random.choice(next_state_candidates)]
+
+        next_row_index = random.choice(next_state_candidates)
+        next_row = self.full_data.iloc[next_row_index]
+        while next_row["state_index"] == self.current_state_index:
+            next_row_index += 1
+            next_row = self.full_data.iloc[next_row_index]
 
         # ----------------------------------------------------------
         # 行動に対する報酬 (例: Swingで得点があれば加算)
@@ -195,6 +200,7 @@ for episode in range(n_episodes):
     state_idx = env.reset()
     total_reward = 0
     done = False
+    n_steps = 0
 
     while not done:
         # ε-greedy 方策による行動選択
@@ -217,7 +223,10 @@ for episode in range(n_episodes):
         # 状態を更新
         state_idx = next_state_idx
 
-    print(f"Episode {episode + 1}/{n_episodes} : Total Reward: {total_reward}")
+        # ステップ数をカウント
+        n_steps += 1
+
+    print(f"Episode {episode + 1}/{n_episodes} : Steps {n_steps} : Total Reward {total_reward}")
 
 # Qテーブルの保存
 output_q_table = "q_table_updated3_essential.npy"
