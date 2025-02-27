@@ -97,7 +97,7 @@ class BaseballEnv(gym.Env):
                 f"Warning: No next state candidates found for current_state_index: {self.current_state_index} and action: {action}. Skip to the next episode.",
                 file=sys.stderr,
             )
-            return self.current_state_index, 0, True, {}
+            return self.current_state_index, -1, True, {}  # penalty
 
         # ランダムに1つを選択
         next_row_index = random.choice(next_state_candidates)
@@ -113,7 +113,7 @@ class BaseballEnv(gym.Env):
                     f"Warning: No more rows found for current_state_index: {self.current_state_index}. Skip to the next episode.",
                     file=sys.stderr,
                 )
-                return self.current_state_index, 0, True, {}
+                return self.current_state_index, -1, True, {}  # penalty
 
         # ----------------------------------------------------------
         # 行動に対する報酬 (例: Swingで得点があれば加算)
