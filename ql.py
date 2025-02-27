@@ -93,7 +93,10 @@ class BaseballEnv(gym.Env):
             (self.full_data["state_index"] == self.current_state_index) & (self.full_data["swing_flag"] == action)
         ]["index"].values
         if len(next_state_candidates) == 0:
-            print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
+            print(
+                f"Warning: No next state candidates found for current_state_index: {self.current_state_index} and action: {action}. Skip to the next episode.",
+                file=sys.stderr,
+            )
             return self.current_state_index, 0, True, {}
 
         # ランダムに1つを選択
@@ -103,7 +106,14 @@ class BaseballEnv(gym.Env):
         # 状態IDが変更になるまで次の行を取得
         while next_row["state_index"] == self.current_state_index:
             next_row_index += 1
-            next_row = self.full_data.iloc[next_row_index]
+            try:
+                next_row = self.full_data.iloc[next_row_index]
+            except IndexError:
+                print(
+                    f"Warning: No more rows found for current_state_index: {self.current_state_index}. Skip to the next episode.",
+                    file=sys.stderr,
+                )
+                return self.current_state_index, 0, True, {}
 
         # ----------------------------------------------------------
         # 行動に対する報酬 (例: Swingで得点があれば加算)
