@@ -40,9 +40,8 @@ class BaseballEnv(gym.Env):
         # 状態 -> インデックス のマッピングを作成
         #    例: (0, 1, 0, 2, 0, 1, 3, 0) -> 1234 (状態ID)
         # ----------------------------------------------------------
-        print("*** Creating state to index mapping...", flush=True)
         self.state_to_index = {}
-        for idx, row_values in tqdm(enumerate(self.state_set.values)):
+        for idx, row_values in enumerate(self.state_set.values):
             # row_values は [batting_average_Class, ERA_Class, ..., inning_class] のndarray
             # タプルに変換して dictキーにする
             row_tuple = tuple(row_values)
@@ -54,7 +53,6 @@ class BaseballEnv(gym.Env):
         # ----------------------------------------------------------
         # 高速化のため：各データの状態indexを予め計算
         # ----------------------------------------------------------
-        print("*** Creating state index column...", flush=True)
         self.full_data["state_index"] = self.full_data.apply(self._get_state_index, axis=1)
 
         # ----------------------------------------------------------
@@ -92,7 +90,7 @@ class BaseballEnv(gym.Env):
         ]["index"].values
         if len(next_state_candidates) == 0:
             print(
-                f"Warning: No next state candidates found for current_state_index: {self.current_state_index} and action: {action}. Skip to the next episode.",
+                f"Warning: No next state candidates found for state: {self.current_state_index} and action: {action}. Skip to the next episode.",
                 file=sys.stderr,
             )
             return self.current_state_index, -1, True, {}  # penalty
@@ -108,7 +106,7 @@ class BaseballEnv(gym.Env):
                 next_row = self.full_data.iloc[next_row_index]
             except IndexError:
                 print(
-                    f"Warning: No more rows found for current_state_index: {self.current_state_index}. Skip to the next episode.",
+                    f"Warning: No more rows found for state: {self.current_state_index} and action: {action}. Skip to the next episode.",
                     file=sys.stderr,
                 )
                 return self.current_state_index, -1, True, {}  # penalty
