@@ -73,6 +73,7 @@ class BaseballEnv(gym.Env):
         self.current_step = 0
         self.previous_runner_status = 0
         self.current_state_index = None  # 離散状態ID
+        self.reset()
 
     def reset(self):
         """環境のリセット"""
@@ -87,7 +88,7 @@ class BaseballEnv(gym.Env):
         # 現在の状態を取得
         reward = 0
 
-        # 次の状態の候補を取得
+        # データから現在の状態＋行動に対応する行を収集
         next_state_candidates = self.full_data[
             (self.full_data["state_index"] == self.current_state_index) & (self.full_data["swing_flag"] == action)
         ]["index"].values
@@ -95,8 +96,11 @@ class BaseballEnv(gym.Env):
             print("Warning: No next state candidates found. Skip to the next episode.", file=sys.stderr)
             return self.current_state_index, 0, True, {}
 
+        # ランダムに1つを選択
         next_row_index = random.choice(next_state_candidates)
         next_row = self.full_data.iloc[next_row_index]
+
+        # 状態IDが変更になるまで次の行を取得
         while next_row["state_index"] == self.current_state_index:
             next_row_index += 1
             next_row = self.full_data.iloc[next_row_index]
@@ -126,12 +130,9 @@ class BaseballEnv(gym.Env):
         # 次のステップへ
         # ----------------------------------------------------------
         self.current_step += 1
-        next_state_index = self._get_state_index(next_row)
+        self.current_state_index = next_row["state_index"]
 
-        # 状態を更新
-        self.current_state_index = next_state_index
-
-        return next_state_index, reward, done, {}
+        return self.current_state_index, reward, done, {}
 
     def _get_state_index(self, row):
         """
@@ -200,7 +201,6 @@ for episode in range(n_episodes):
     state_idx = env.reset()
     total_reward = 0
     done = False
-    n_steps = 0
 
     while not done:
         # ε-greedy 方策による行動選択
@@ -223,10 +223,7 @@ for episode in range(n_episodes):
         # 状態を更新
         state_idx = next_state_idx
 
-        # ステップ数をカウント
-        n_steps += 1
-
-    print(f"Episode {episode + 1}/{n_episodes} : Steps {n_steps} : Total Reward {total_reward}")
+    print(f"Episode {episode + 1}/{n_episodes} : Steps {env.current_step} : Total Reward {total_reward}")
 
 # Qテーブルの保存
 output_q_table = "q_table_updated3_essential.npy"
