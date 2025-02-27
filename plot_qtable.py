@@ -6,7 +6,7 @@ import seaborn as sns
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output_file", type=str)
+    parser.add_argument("--output_file", "-o", type=str)
     parser.add_argument("file", type=str)
     return parser.parse_args()
 
